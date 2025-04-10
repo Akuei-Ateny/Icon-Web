@@ -222,7 +222,7 @@ const BattleArena = () => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "api-key": "CKaJ47ef5qAohlZnQOd0fiJMDbisb6vz231KPbGHvyUFlZ6ldeVxJQQJ99BDACHYHv6XJ3w3AAABACOG0cot"
+          "api-key": import.meta.env.VITE_AZURE_OPENAI_KEY || ""
         },
         signal: abortControllerRef.current?.signal,
         body: JSON.stringify({

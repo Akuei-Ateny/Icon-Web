@@ -48,6 +48,7 @@ export function useQuizQuestion(questionIndex: number) {
             'Authorization': `Bearer ${apiKey}`
           },
           body: JSON.stringify({
+            model: 'gpt-4o',
             messages: [
               {
                 role: 'system',
