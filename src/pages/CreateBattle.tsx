@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -37,7 +36,7 @@ const CreateBattle = () => {
     try {
       console.log("Creating battle with user:", user.id);
       
-      // Verify the user exists in the profiles table
+      // Verify the user exists in the users table
       const { data: userProfile, error: profileError } = await supabase
         .from('users')
         .select('id')
@@ -62,7 +61,7 @@ const CreateBattle = () => {
       
       console.log("Creating battle with problem:", randomProblem.id);
       
-      // Create battle in Supabase with the correct schema
+      // Create battle in Supabase
       const { data: battle, error } = await supabase
         .from('battles')
         .insert([

@@ -72,187 +72,39 @@ export type Solution = {
   submitted_at: string;
 };
 
-// Function to initialize database tables
+// Simplified database initialization function
+// Instead of executing SQL directly, we'll check if tables exist
 export const initializeDatabase = async () => {
   try {
-    console.log('Initializing database tables...');
+    console.log('Checking database tables...');
     
-    // Create users table - using the structure from the schema
-    const createUsersTableSQL = `
-      CREATE TABLE IF NOT EXISTS users (
-        id UUID PRIMARY KEY REFERENCES auth.users(id),
-        username TEXT UNIQUE NOT NULL,
-        email TEXT UNIQUE,
-        avatar_url TEXT,
-        rating INTEGER DEFAULT 1000,
-        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-      );
-    `;
+    // Check if tables exist by attempting to query them
+    const tablesStatus = {
+      users: await tableExists('users'),
+      rating_history: await tableExists('rating_history'),
+      battles: await tableExists('battles'),
+      submissions: await tableExists('submissions')
+    };
     
-    // Create rating_history table - using the exact structure from your schema
-    const createRatingHistoryTableSQL = `
-      CREATE TABLE IF NOT EXISTS rating_history (
-        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-        user_id UUID NOT NULL REFERENCES auth.users(id),
-        rating INTEGER NOT NULL,
-        battle_id UUID,
-        notes TEXT,
-        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-      );
-    `;
+    console.log('Tables status:', tablesStatus);
     
-    // Create battles table
-    const createBattlesTableSQL = `
-      CREATE TABLE IF NOT EXISTS battles (
-        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-        creator_id UUID NOT NULL REFERENCES auth.users(id),
-        defender_id UUID REFERENCES auth.users(id),
-        problem_id INTEGER NOT NULL,
-        programming_language TEXT NOT NULL,
-        difficulty TEXT NOT NULL CHECK (difficulty IN ('Easy', 'Medium', 'Hard')),
-        duration INTEGER NOT NULL,
-        battle_type TEXT NOT NULL CHECK (battle_type IN ('Rated', 'Casual')),
-        status TEXT NOT NULL CHECK (status IN ('open', 'in_progress', 'completed')),
-        winner_id UUID REFERENCES auth.users(id),
-        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-        started_at TIMESTAMP WITH TIME ZONE,
-        ended_at TIMESTAMP WITH TIME ZONE
-      );
-    `;
-    
-    // Create submissions table with nullable fields as per your schema
-    const createSubmissionsTableSQL = `
-      CREATE TABLE IF NOT EXISTS submissions (
-        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-        battle_id UUID NOT NULL REFERENCES battles(id),
-        user_id UUID NOT NULL REFERENCES auth.users(id),
-        code TEXT NOT NULL,
-        language TEXT NOT NULL,
-        status TEXT NOT NULL CHECK (status IN ('pending', 'correct', 'incorrect', 'evaluated', 'error')),
-        score INTEGER,
-        feedback TEXT,
-        submitted_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-        evaluated_at TIMESTAMP WITH TIME ZONE
-      );
-    `;
-
-    // Create join_battle function
-    const createJoinBattleFunctionSQL = `
-      CREATE OR REPLACE FUNCTION join_battle(battle_id UUID, defender_user_id UUID)
-      RETURNS void AS $$
-      BEGIN
-        UPDATE battles 
-        SET 
-          defender_id = defender_user_id, 
-          status = 'in_progress', 
-          started_at = NOW()
-        WHERE id = battle_id;
-      END;
-      $$ LANGUAGE plpgsql SECURITY DEFINER;
-    `;
-    
-    // Try to execute SQL statements
-    try {
-      await supabase.rpc('exec_sql', { sql: createUsersTableSQL });
-      console.log('Users table created or already exists');
-    } catch (err) {
-      console.warn('Failed to create users table:', err);
+    // If all tables exist, assume initialization is complete
+    if (Object.values(tablesStatus).every(status => status)) {
+      console.log('All required tables exist. Database initialization complete.');
+      return true;
     }
     
-    try {
-      await supabase.rpc('exec_sql', { sql: createRatingHistoryTableSQL });
-      console.log('Rating history table created or already exists');
-    } catch (err) {
-      console.warn('Failed to create rating_history table:', err);
-    }
+    // If we're here, not all tables exist, but we're not creating them
+    // Instead, we'll log a message indicating tables need to be created in Supabase dashboard
+    console.log('Some tables do not exist. Please create required tables in Supabase dashboard.');
+    console.log('Missing tables:', Object.entries(tablesStatus)
+      .filter(([_, exists]) => !exists)
+      .map(([table]) => table)
+      .join(', '));
     
-    try {
-      await supabase.rpc('exec_sql', { sql: createBattlesTableSQL });
-      console.log('Battles table created or already exists');
-    } catch (err) {
-      console.warn('Failed to create battles table:', err);
-    }
-    
-    try {
-      await supabase.rpc('exec_sql', { sql: createSubmissionsTableSQL });
-      console.log('Submissions table created or already exists');
-    } catch (err) {
-      console.warn('Failed to create submissions table:', err);
-    }
-    
-    try {
-      await supabase.rpc('exec_sql', { sql: createJoinBattleFunctionSQL });
-      console.log('join_battle function created or already exists');
-    } catch (err) {
-      console.warn('Failed to create join_battle function:', err);
-    }
-    
-    // Setup RLS policies based on your schema
-    try {
-      // Enable RLS on all tables
-      await supabase.rpc('exec_sql', { sql: `ALTER TABLE users ENABLE ROW LEVEL SECURITY;` });
-      await supabase.rpc('exec_sql', { sql: `ALTER TABLE rating_history ENABLE ROW LEVEL SECURITY;` });
-      await supabase.rpc('exec_sql', { sql: `ALTER TABLE battles ENABLE ROW LEVEL SECURITY;` });
-      await supabase.rpc('exec_sql', { sql: `ALTER TABLE submissions ENABLE ROW LEVEL SECURITY;` });
-      
-      // Create RLS policies for rating_history as defined in your schema
-      await supabase.rpc('exec_sql', { sql: `
-        CREATE POLICY IF NOT EXISTS "Rating history is viewable by everyone" 
-        ON rating_history
-        FOR SELECT 
-        USING (true);
-      ` });
-      
-      await supabase.rpc('exec_sql', { sql: `
-        CREATE POLICY IF NOT EXISTS "Users can add to their own rating history" 
-        ON rating_history
-        FOR INSERT 
-        WITH CHECK (auth.uid() = user_id);
-      ` });
-      
-      await supabase.rpc('exec_sql', { sql: `
-        CREATE POLICY IF NOT EXISTS "Users can update their own rating history" 
-        ON rating_history
-        FOR UPDATE 
-        USING (auth.uid() = user_id);
-      ` });
-      
-      // Create policies for users table
-      await supabase.rpc('exec_sql', { sql: `
-        CREATE POLICY IF NOT EXISTS "Users are viewable by everyone" 
-        ON users
-        FOR SELECT 
-        USING (true);
-      ` });
-      
-      await supabase.rpc('exec_sql', { sql: `
-        CREATE POLICY IF NOT EXISTS "Users can update their own data" 
-        ON users
-        FOR UPDATE 
-        USING (auth.uid() = id);
-      ` });
-      
-      // Create indexes for rating_history as defined in your schema
-      await supabase.rpc('exec_sql', { sql: `
-        CREATE INDEX IF NOT EXISTS idx_rating_history_user_id 
-        ON rating_history(user_id);
-      ` });
-      
-      await supabase.rpc('exec_sql', { sql: `
-        CREATE INDEX IF NOT EXISTS idx_rating_history_battle_id 
-        ON rating_history(battle_id);
-      ` });
-      
-      console.log('RLS policies and indexes created or already exist');
-    } catch (err) {
-      console.warn('Failed to create some RLS policies or indexes:', err);
-    }
-    
-    console.log('Database initialization completed');
-    return true;
+    return false;
   } catch (error) {
-    console.error('Error initializing database:', error);
+    console.error('Error checking database tables:', error);
     return false;
   }
 };
@@ -265,9 +117,44 @@ export const tableExists = async (tableName: string): Promise<boolean> => {
       .select('*', { count: 'exact', head: true })
       .limit(1);
     
-    return !error;
+    if (error) {
+      if (error.code === '42P01') { // Table doesn't exist error code
+        console.log(`Table ${tableName} doesn't exist`);
+        return false;
+      }
+      
+      console.error(`Error checking if table ${tableName} exists:`, error);
+      return false;
+    }
+    
+    return true;
   } catch (error) {
     console.error(`Error checking if table ${tableName} exists:`, error);
+    return false;
+  }
+};
+
+// Join battle function using standard Supabase update
+export const joinBattle = async (battleId: string, defenderId: string): Promise<boolean> => {
+  try {
+    const { data, error } = await supabase
+      .from('battles')
+      .update({
+        defender_id: defenderId,
+        status: 'in_progress' as const,
+        started_at: new Date().toISOString()
+      })
+      .eq('id', battleId)
+      .select();
+    
+    if (error) {
+      console.error('Error joining battle:', error);
+      return false;
+    }
+    
+    return true;
+  } catch (error) {
+    console.error('Exception in joinBattle:', error);
     return false;
   }
 };
@@ -286,13 +173,8 @@ export const optimizedFetch = async <T>(
     // Check if table exists before querying
     const exists = await tableExists(table);
     if (!exists) {
-      console.warn(`Table ${table} does not exist. Initializing database...`);
-      await initializeDatabase();
-      // If it still doesn't exist after initialization, return null
-      if (!(await tableExists(table))) {
-        console.error(`Table ${table} still does not exist after initialization`);
-        return null;
-      }
+      console.warn(`Table ${table} does not exist.`);
+      return null;
     }
     
     let baseQuery = supabase.from(table).select('*');

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
@@ -15,7 +14,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
-import { supabase, Battle } from '@/lib/supabase';
+import { supabase, Battle, joinBattle } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 
 const JoinBattle = () => {
@@ -112,7 +111,6 @@ const JoinBattle = () => {
     setJoiningBattleId(battle.id);
     
     try {
-      // Verify battle is still available
       const { data: currentBattle, error: fetchError } = await supabase
         .from('battles')
         .select('*')
@@ -128,44 +126,15 @@ const JoinBattle = () => {
         return;
       }
       
-      // Try a raw SQL update as a workaround for potential type issues
-      const { error: rpcError } = await supabase.rpc('join_battle', {
-        battle_id: battle.id,
-        defender_user_id: user.id
-      });
+      console.log("Battle found, attempting to join:", currentBattle);
       
-      if (rpcError) {
-        console.error("RPC Error:", rpcError);
-        
-        // Fall back to regular update if RPC fails
-        console.log('Falling back to direct update. User ID:', user.id);
-        
-        const updatePayload = {
-          defender_id: user.id,
-          status: 'in_progress' as const,
-          started_at: new Date().toISOString()
-        };
-        
-        console.log('Update payload:', updatePayload);
-        
-        const { data, error } = await supabase
-          .from('battles')
-          .update(updatePayload)
-          .eq('id', battle.id)
-          .select();
-          
-        if (error) {
-          console.error("Error joining battle:", error);
-          toast.error(`Failed to join: ${error.message}`);
-          throw error;
-        }
-        
-        console.log("Battle joined successfully, updated data:", data);
-      } else {
-        console.log("Battle joined successfully via RPC");
+      const success = await joinBattle(battle.id, user.id);
+      
+      if (!success) {
+        toast.error("Failed to join battle. Please try again.");
+        return;
       }
       
-      // Verify the update was successful by fetching the battle again
       const { data: verifyBattle, error: verifyError } = await supabase
         .from('battles')
         .select('*')
