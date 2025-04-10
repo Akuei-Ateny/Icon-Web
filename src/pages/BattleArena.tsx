@@ -154,6 +154,7 @@ const BattleArena = () => {
         language
       });
       
+      console.log("Checking battle participation...");
       const { data: battleCheck, error: battleCheckError } = await supabase
         .from('battles')
         .select('creator_id, defender_id')
@@ -168,6 +169,7 @@ const BattleArena = () => {
         return;
       }
       
+      console.log("Battle participation check result:", battleCheck);
       if (battleCheck.creator_id !== user.id && battleCheck.defender_id !== user.id) {
         console.error('User is not a participant in this battle');
         toast.error('You are not authorized to submit to this battle');
@@ -175,6 +177,9 @@ const BattleArena = () => {
         setEvaluationProgress(0);
         return;
       }
+      
+      console.log("Creating submission record...");
+      setEvaluationProgress(20);
       
       const { data: submission, error: submissionError } = await supabase
         .from('submissions')
@@ -198,19 +203,21 @@ const BattleArena = () => {
       }
   
       console.log("Submission created successfully:", submission.id);
-      submissionData = submission; // Store submission in a variable accessible in the catch block
+      submissionData = submission;
       setEvaluationProgress(40);
       
       // Setup abort controller for timeout handling
       abortControllerRef.current = new AbortController();
       
+      console.log("Setting up API request with timeout...");
       const timeoutId = setTimeout(() => {
         if (abortControllerRef.current) {
           abortControllerRef.current.abort();
           console.log("API request aborted due to timeout");
         }
-      }, 15000);
+      }, 15000); // 15 second timeout
       
+      console.log("Sending evaluation request to GPT API...");
       const gptRes = await fetch("https://icon-scoring.openai.azure.com/openai/deployments/gpt-4o/chat/completions?api-version=2025-01-01-preview", {
         method: "POST",
         headers: {
@@ -222,7 +229,7 @@ const BattleArena = () => {
           messages: [
             {
               role: "system",
-              content: "You are an efficient code evaluator. Score the code from 0-100 based on correctness, and give brief feedback. Format response with the score first, then feedback: 'Score: XX/100\n\nFeedback: [brief feedback]'"
+              content: "You are a code evaluator. Score the code from 0-100 based on correctness. Format: 'Score: XX/100\\n\\nFeedback: [brief feedback]'"
             },
             {
               role: "user",
@@ -236,6 +243,7 @@ const BattleArena = () => {
       });
       
       clearTimeout(timeoutId);
+      console.log("GPT API response received");
       setEvaluationProgress(80);
   
       if (!gptRes.ok) {
@@ -245,7 +253,7 @@ const BattleArena = () => {
       }
       
       const gptData = await gptRes.json();
-      console.log("GPT evaluation response received:", gptData);
+      console.log("GPT evaluation response parsed:", gptData?.choices?.[0]?.message?.content?.substring(0, 50) + "...");
       
       if (!gptData.choices || !gptData.choices[0]) {
         throw new Error("Invalid API response");
@@ -289,6 +297,7 @@ const BattleArena = () => {
           setSubmissionResult(updatedSubmission as Submission);
           setShowScoreDialog(true);
           toast.success('Code evaluated and scored!');
+          queryClient.invalidateQueries({ queryKey: ['battle', battleId] });
         }
       }
     } catch (evalError) {
@@ -298,6 +307,7 @@ const BattleArena = () => {
         
         // Use the stored submission data for the fallback update
         if (submissionData) {
+          console.log("Applying fallback evaluation due to timeout");
           const { error: fallbackError } = await supabase
             .from('submissions')
             .update({
@@ -309,6 +319,7 @@ const BattleArena = () => {
             .eq('id', submissionData.id);
             
           if (!fallbackError) {
+            console.log("Fallback evaluation applied successfully");
             const { data: updatedSubmission } = await supabase
               .from('submissions')
               .select('*')
@@ -318,7 +329,10 @@ const BattleArena = () => {
             if (updatedSubmission) {
               setSubmissionResult(updatedSubmission as Submission);
               setShowScoreDialog(true);
+              queryClient.invalidateQueries({ queryKey: ['battle', battleId] });
             }
+          } else {
+            console.error("Failed to apply fallback evaluation:", fallbackError);
           }
         }
       } else {
@@ -326,6 +340,7 @@ const BattleArena = () => {
       }
     } finally {
       setIsSubmitting(false);
+      abortControllerRef.current = null;
       setTimeout(() => setEvaluationProgress(0), 1000);
     }
   };
