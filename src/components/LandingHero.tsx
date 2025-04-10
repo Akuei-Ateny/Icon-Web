@@ -1,6 +1,5 @@
-
 import React from 'react';
-import { Code, ArrowRight, Award, Timer } from 'lucide-react';
+import { Code, ArrowRight, Award, Timer, BookOpen } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 
@@ -49,6 +48,14 @@ const LandingHero = () => {
             Join Battle
             <ArrowRight className="ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform" />
           </Button>
+          
+          <Button 
+            className="icon-button icon-button-secondary group"
+            onClick={() => navigate('/quizzes')}
+          >
+            Practice Quizzes
+            <BookOpen className="ml-2 h-4 w-4 group-hover:scale-110 transition-transform" />
+          </Button>
         </div>
       </div>
       
@@ -72,10 +79,10 @@ const LandingHero = () => {
         
         <div className="bg-icon-dark-gray p-6 rounded-lg border border-icon-gray">
           <div className="h-12 w-12 rounded-full bg-icon-accent/20 flex items-center justify-center mb-4">
-            <Award className="h-6 w-6 text-icon-accent" />
+            <BookOpen className="h-6 w-6 text-icon-accent" />
           </div>
-          <h3 className="text-xl font-semibold mb-2">Earn Ratings</h3>
-          <p className="text-icon-light-gray">Rise through the ranks with our competitive rating system as you win battles.</p>
+          <h3 className="text-xl font-semibold mb-2">Practice Quizzes</h3>
+          <p className="text-icon-light-gray">Test your knowledge with multiple-choice quizzes on algorithms and data structures.</p>
         </div>
       </div>
     </div>
