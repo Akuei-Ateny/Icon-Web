@@ -26,6 +26,7 @@ import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/componen
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Progress } from '@/components/ui/progress';
 
 interface ChatMessage {
   id: string;
@@ -52,14 +53,14 @@ const BattleArena = () => {
   const [isTimerRunning, setIsTimerRunning] = useState(false);
   const [chatPosition, setChatPosition] = useState({ x: 100, y: 100 });
   const [showScoreDialog, setShowScoreDialog] = useState(false);
+  const [evaluationProgress, setEvaluationProgress] = useState(0);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const chatBubbleRef = useRef<HTMLDivElement>(null);
   const dragOffset = useRef({ x: 0, y: 0 });
   const channelRef = useRef<ReturnType<typeof supabase.channel>>();
-  const openAIKey = process.env.VITE_AZURE_OPENAI_KEY;
+  const abortControllerRef = useRef<AbortController | null>(null);
 
-  // Fetch battle data
   const { data: battle, isLoading, error } = useQuery({
     queryKey: ['battle', battleId],
     queryFn: async () => {
@@ -71,7 +72,6 @@ const BattleArena = () => {
     refetchInterval: 5000,
   });
 
-  // Fetch problem data
   const { data: problem, isLoading: isProblemLoading } = useQuery({
     queryKey: ['problem', battle?.problem_id],
     queryFn: async () => {
@@ -81,7 +81,6 @@ const BattleArena = () => {
     enabled: !!battle?.problem_id,
   });
 
-  // Set up real-time messaging channel
   useEffect(() => {
     if (!battleId || !user) return;
 
@@ -105,21 +104,18 @@ const BattleArena = () => {
     };
   }, [battleId, user]);
 
-  // Scroll to bottom when chat messages change
   useEffect(() => {
     if (chatContainerRef.current) {
       chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
     }
   }, [chatMessages]);
 
-  // Set timer when battle data is loaded
   useEffect(() => {
     if (battle?.duration) {
       setTimeLeft(battle.duration * 60);
     }
   }, [battle]);
 
-  // Timer logic
   useEffect(() => {
     if (battle && timeLeft !== null && isTimerRunning) {
       timerRef.current = setInterval(() => {
@@ -140,7 +136,6 @@ const BattleArena = () => {
     };
   }, [isTimerRunning, timeLeft]);
 
-  // Submit code to Supabase and get OpenAI evaluation
   const handleSubmitCode = async () => {
     if (!battleId || !user || !problem) {
       toast.error("Missing required data for submission");
@@ -148,16 +143,17 @@ const BattleArena = () => {
     }
     
     setIsSubmitting(true);
-    
+    setEvaluationProgress(10);
+    let submissionData: Submission | null = null;
+
     try {
       console.log("Starting submission with data:", {
         battle_id: battleId,
         user_id: user.id,
-        code: code.substring(0, 20) + "...", // Truncated for logging
+        code: code.substring(0, 20) + "...",
         language
       });
       
-      // First, check if user is a participant in this battle
       const { data: battleCheck, error: battleCheckError } = await supabase
         .from('battles')
         .select('creator_id, defender_id')
@@ -168,19 +164,18 @@ const BattleArena = () => {
         console.error('Battle check error:', battleCheckError);
         toast.error('Failed to verify battle participation');
         setIsSubmitting(false);
+        setEvaluationProgress(0);
         return;
       }
       
-      // Verify user is a participant
       if (battleCheck.creator_id !== user.id && battleCheck.defender_id !== user.id) {
         console.error('User is not a participant in this battle');
         toast.error('You are not authorized to submit to this battle');
         setIsSubmitting(false);
+        setEvaluationProgress(0);
         return;
       }
       
-      // First, insert the submission with required fields only
-      console.log("Inserting submission record...");
       const { data: submission, error: submissionError } = await supabase
         .from('submissions')
         .insert({
@@ -198,105 +193,143 @@ const BattleArena = () => {
         console.error('Submission error:', submissionError);
         toast.error('Failed to submit code: ' + submissionError?.message);
         setIsSubmitting(false);
+        setEvaluationProgress(0);
         return;
       }
   
       console.log("Submission created successfully:", submission.id);
+      submissionData = submission; // Store submission in a variable accessible in the catch block
+      setEvaluationProgress(40);
       
-      try {
-        // Call OpenAI evaluation API
-        console.log("Calling GPT evaluation API...");
-        const gptRes = await fetch(process.env.VITE_AZURE_OPENAI_ENDPOINT || "", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "api-key": openAIKey || ""
-          },
-          body: JSON.stringify({
-            messages: [
-              {
-                role: "system",
-                content: "You are a strict code evaluator. Evaluate the given code out of 100. Consider correctness, code quality, time complexity, memory efficiency, and overall implementation. Give a score between 0 and 100 and then give a paragraph of feedback (2-3 sentences) explaining the strengths and weaknesses."
-              },
-              {
-                role: "user",
-                content: `Evaluate the following submission for the problem: \n\n${problem.question}\n\nCode:\n${code}`
-              }
-            ],
-            temperature: 0.3,
-            max_tokens: 300,
-            top_p: 1,
-            frequency_penalty: 0,
-            presence_penalty: 0,
-          })
-        });
-  
-        if (!gptRes.ok) {
-          const errorText = await gptRes.text();
-          console.error("GPT API error:", gptRes.status, errorText);
-          throw new Error(`API error: ${gptRes.status} - ${errorText}`);
+      // Setup abort controller for timeout handling
+      abortControllerRef.current = new AbortController();
+      
+      const timeoutId = setTimeout(() => {
+        if (abortControllerRef.current) {
+          abortControllerRef.current.abort();
+          console.log("API request aborted due to timeout");
         }
-        
-        const gptData = await gptRes.json();
-        console.log("GPT evaluation response received:", gptData);
-        
-        if (!gptData.choices || !gptData.choices[0]) {
-          throw new Error("Invalid API response");
-        }
-        
-        const responseText = gptData.choices[0].message.content;
-        const scoreMatch = responseText.match(/(\d+)(?=\s*\/|\s*out of|\s*points|\s*%|\b)/i);
-        const score = scoreMatch ? parseInt(scoreMatch[0]) : 50; // Default to 50 if no valid score found
+      }, 15000);
+      
+      const gptRes = await fetch("https://icon-scoring.openai.azure.com/openai/deployments/gpt-4o/chat/completions?api-version=2025-01-01-preview", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "api-key": "CKaJ47ef5qAohlZnQOd0fiJMDbisb6vz231KPbGHvyUFlZ6ldeVxJQQJ99BDACHYHv6XJ3w3AAABACOG0cot"
+        },
+        signal: abortControllerRef.current?.signal,
+        body: JSON.stringify({
+          messages: [
+            {
+              role: "system",
+              content: "You are an efficient code evaluator. Score the code from 0-100 based on correctness, and give brief feedback. Format response with the score first, then feedback: 'Score: XX/100\n\nFeedback: [brief feedback]'"
+            },
+            {
+              role: "user",
+              content: `Problem: ${problem.title}\n${problem.question.slice(0, 200)}...\n\nCode:\n${code}`
+            }
+          ],
+          temperature: 0.1,
+          max_tokens: 150,
+          top_p: 1,
+        })
+      });
+      
+      clearTimeout(timeoutId);
+      setEvaluationProgress(80);
   
-        console.log("Extracted score:", score);
-        console.log("Updating submission with evaluation results...");
+      if (!gptRes.ok) {
+        const errorText = await gptRes.text();
+        console.error("GPT API error:", gptRes.status, errorText);
+        throw new Error(`API error: ${gptRes.status} - ${errorText}`);
+      }
+      
+      const gptData = await gptRes.json();
+      console.log("GPT evaluation response received:", gptData);
+      
+      if (!gptData.choices || !gptData.choices[0]) {
+        throw new Error("Invalid API response");
+      }
+      
+      const responseText = gptData.choices[0].message.content;
+      const scoreMatch = responseText.match(/(\d+)(?=\s*\/|\s*out of|\s*points|\s*%|\b)/i);
+      const score = scoreMatch ? parseInt(scoreMatch[0]) : 50;
+      
+      console.log("Extracted score:", score);
+      setEvaluationProgress(90);
+      console.log("Updating submission with evaluation results...");
+      
+      const { error: updateError } = await supabase
+        .from('submissions')
+        .update({
+          status: 'evaluated',
+          score: score,
+          feedback: responseText,
+          evaluated_at: new Date().toISOString(),
+        })
+        .eq('id', submission.id);
+  
+      if (updateError) {
+        console.error('Evaluation update error:', updateError);
+        toast.error('Failed to update evaluation results: ' + updateError.message);
+      } else {
+        console.log("Submission updated with evaluation");
+        setEvaluationProgress(100);
         
-        // Update submission with evaluation results
-        const { error: updateError } = await supabase
+        const { data: updatedSubmission, error: fetchError } = await supabase
           .from('submissions')
-          .update({
-            status: 'evaluated',
-            score: score,
-            feedback: responseText,
-            evaluated_at: new Date().toISOString(),
-          })
-          .eq('id', submission.id);
-  
-        if (updateError) {
-          console.error('Evaluation update error:', updateError);
-          toast.error('Failed to update evaluation results: ' + updateError.message);
-        } else {
-          console.log("Submission updated with evaluation");
+          .select('*')
+          .eq('id', submission.id)
+          .single();
           
-          // Get the updated submission
-          const { data: updatedSubmission, error: fetchError } = await supabase
+        if (fetchError || !updatedSubmission) {
+          console.error('Error fetching updated submission:', fetchError);
+          toast.error('Error retrieving updated submission: ' + fetchError?.message);
+        } else {
+          setSubmissionResult(updatedSubmission as Submission);
+          setShowScoreDialog(true);
+          toast.success('Code evaluated and scored!');
+        }
+      }
+    } catch (evalError) {
+      console.error('Evaluation error:', evalError);
+      if (evalError instanceof DOMException && evalError.name === 'AbortError') {
+        toast.error('Evaluation timed out. Please try again with simpler code.');
+        
+        // Use the stored submission data for the fallback update
+        if (submissionData) {
+          const { error: fallbackError } = await supabase
             .from('submissions')
-            .select('*')
-            .eq('id', submission.id)
-            .single();
+            .update({
+              status: 'evaluated',
+              score: 50,
+              feedback: "Evaluation timed out. This might be due to code complexity or server load. Your submission has been assigned a provisional score.",
+              evaluated_at: new Date().toISOString(),
+            })
+            .eq('id', submissionData.id);
             
-          if (fetchError || !updatedSubmission) {
-            console.error('Error fetching updated submission:', fetchError);
-            toast.error('Error retrieving updated submission: ' + fetchError?.message);
-          } else {
-            setSubmissionResult(updatedSubmission as Submission);
-            setShowScoreDialog(true);
-            toast.success('Code evaluated and scored!');
+          if (!fallbackError) {
+            const { data: updatedSubmission } = await supabase
+              .from('submissions')
+              .select('*')
+              .eq('id', submissionData.id)
+              .single();
+              
+            if (updatedSubmission) {
+              setSubmissionResult(updatedSubmission as Submission);
+              setShowScoreDialog(true);
+            }
           }
         }
-      } catch (evalError) {
-        console.error('Evaluation error:', evalError);
+      } else {
         toast.error('Code evaluation failed: ' + (evalError instanceof Error ? evalError.message : String(evalError)));
       }
-    } catch (err) {
-      console.error('Overall submission process error:', err);
-      toast.error('Submission failed: ' + (err instanceof Error ? err.message : String(err)));
     } finally {
       setIsSubmitting(false);
+      setTimeout(() => setEvaluationProgress(0), 1000);
     }
   };
 
-  // Chat functions
   const sendChatMessage = () => {
     if (!chatInput.trim() || !user || !channelRef.current) return;
     
@@ -329,7 +362,6 @@ const BattleArena = () => {
     return `${m}:${s < 10 ? '0' : ''}${s}`;
   };
 
-  // Chat window drag functionality
   const startDrag = (e: React.MouseEvent<HTMLDivElement>) => {
     const rect = chatBubbleRef.current?.getBoundingClientRect();
     if (rect) {
@@ -354,7 +386,6 @@ const BattleArena = () => {
     document.removeEventListener('mouseup', endDrag);
   };
 
-  // Loading states
   if (isLoading || isProblemLoading) {
     return (
       <div className="h-screen flex items-center justify-center">
@@ -372,7 +403,6 @@ const BattleArena = () => {
     );
   }
 
-  // Main UI
   return (
     <div className="h-screen flex flex-col relative">
       <div className="p-4 border-b border-icon-gray flex justify-between items-center bg-icon-dark-gray">
@@ -418,20 +448,31 @@ const BattleArena = () => {
         <ResizablePanel defaultSize={50} minSize={30}>
           <div className="h-full bg-icon-dark-gray p-4 flex flex-col">
             <CodeEditor language={language} onCodeChange={setCode} />
-            <Button
-              className="mt-4 w-full icon-button-primary group"
-              onClick={handleSubmitCode}
-              disabled={isSubmitting}
-            >
-              {isSubmitting ? (
-                <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Submitting...</>
-              ) : (
-                <>
-                  Submit Code
-                  <Send className="ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform" />
-                </>
+            <div className="mt-4 flex flex-col gap-2">
+              {evaluationProgress > 0 && (
+                <div className="flex flex-col gap-1 mb-2">
+                  <div className="flex justify-between text-xs text-icon-light-gray">
+                    <span>Evaluating submission...</span>
+                    <span>{evaluationProgress}%</span>
+                  </div>
+                  <Progress value={evaluationProgress} className="h-2" />
+                </div>
               )}
-            </Button>
+              <Button
+                className="w-full icon-button-primary group"
+                onClick={handleSubmitCode}
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? (
+                  <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Submitting...</>
+                ) : (
+                  <>
+                    Submit Code
+                    <Send className="ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform" />
+                  </>
+                )}
+              </Button>
+            </div>
             {submissionResult && !showScoreDialog && (
               <div className="mt-4 p-3 border border-icon-gray rounded-md bg-icon-gray">
                 <div className="flex items-center justify-between mb-2">
@@ -459,7 +500,6 @@ const BattleArena = () => {
         </ResizablePanel>
       </ResizablePanelGroup>
 
-      {/* Chat bubble */}
       <div
         ref={chatBubbleRef}
         onMouseDown={startDrag}
@@ -530,7 +570,6 @@ const BattleArena = () => {
         )}
       </div>
 
-      {/* Score Dialog */}
       <Dialog open={showScoreDialog} onOpenChange={setShowScoreDialog}>
         <DialogContent className="bg-icon-dark-gray border border-icon-gray">
           <DialogHeader>
