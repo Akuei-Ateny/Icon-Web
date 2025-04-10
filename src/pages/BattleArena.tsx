@@ -206,11 +206,11 @@ const BattleArena = () => {
       try {
         // Call OpenAI evaluation API
         console.log("Calling GPT evaluation API...");
-        const gptRes = await fetch("https://icon-scoring.openai.azure.com/openai/deployments/gpt-4o/chat/completions?api-version=2025-01-01-preview", {
+        const gptRes = await fetch(process.env.VITE_AZURE_OPENAI_ENDPOINT || "", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "api-key": "CKaJ47ef5qAohlZnQOd0fiJMDbisb6vz231KPbGHvyUFlZ6ldeVxJQQJ99BDACHYHv6XJ3w3AAABACOG0cot"
+            "api-key": process.env.VITE_AZURE_OPENAI_KEY || ""
           },
           body: JSON.stringify({
             messages: [
