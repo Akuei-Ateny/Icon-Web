@@ -1,9 +1,13 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Use the correct Supabase URL and key from .env (or fallback values)
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://yeocrioblbcucfbvaeav.supabase.co';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inllb2NyaW9ibGJjdWNmYnZhZWF2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDMxMTgzNzcsImV4cCI6MjA1ODY5NDM3N30.JMtCn8cfuwECYXcQgKH_PApHUlrGVuGaJxidyxzlJYQ';
+// Use environment variables for Supabase URL and key
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
+// Ensure environment variables are set
+if (!supabaseUrl || !supabaseAnonKey) {
+  console.error('Missing Supabase environment variables. Please check your .env file.');
+}
 // Create a singleton instance to avoid multiple connections
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
