@@ -68,10 +68,13 @@ export function useQuizQuestion(questionIndex: number) {
         });
 
         if (!response.ok) {
-          throw new Error('Failed to fetch question');
+            const errorText = await response.text();
+            console.error('Failed to fetch question, API response error:', errorText);
+            throw new Error('Failed to fetch question');
         }
 
         const data = await response.json();
+        console.log('API Response:', data);
         const content = data.choices[0].message.content;
         const match = content.match(/```json\n([\s\S]*?)```/);
         const jsonString = match ? match[1] : content;
