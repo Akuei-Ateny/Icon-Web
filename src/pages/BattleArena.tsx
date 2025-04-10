@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
@@ -58,6 +57,7 @@ const BattleArena = () => {
   const chatBubbleRef = useRef<HTMLDivElement>(null);
   const dragOffset = useRef({ x: 0, y: 0 });
   const channelRef = useRef<ReturnType<typeof supabase.channel>>();
+  const openAIKey = process.env.VITE_AZURE_OPENAI_KEY;
 
   // Fetch battle data
   const { data: battle, isLoading, error } = useQuery({
@@ -210,7 +210,7 @@ const BattleArena = () => {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "api-key": process.env.VITE_AZURE_OPENAI_KEY || ""
+            "api-key": openAIKey || ""
           },
           body: JSON.stringify({
             messages: [
