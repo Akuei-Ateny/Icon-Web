@@ -39,13 +39,13 @@ export function useQuizQuestion(questionIndex: number) {
         }
 
         // If not cached, fetch from the API
-        const apiKey = process.env.VITE_OPENAI_API_KEY || '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'; 
+        const apiKey = import.meta.env.VITE_OPENAI_API_KEY || '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'; 
         
         const response = await fetch('https://api.openai.com/v1/chat/completions', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'api-key': apiKey
+            'Authorization': `Bearer ${apiKey}`
           },
           body: JSON.stringify({
             messages: [
@@ -72,9 +72,9 @@ export function useQuizQuestion(questionIndex: number) {
 
         const data = await response.json();
         const content = data.choices[0].message.content;
-        
-        // Parse the JSON response
-        const questionData: QuizQuestionData = JSON.parse(content);
+        const match = content.match(/```json\n([\s\S]*?)```/);
+        const jsonString = match ? match[1] : content;
+        const questionData: QuizQuestionData = JSON.parse(jsonString);
         
         // Cache the question
         questionsCache[questionIndex] = questionData;
