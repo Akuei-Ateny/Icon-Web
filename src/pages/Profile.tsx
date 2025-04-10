@@ -113,7 +113,7 @@ const Profile = () => {
         setRatingHistory(historyData || []);
       }
       
-      // Calculate statistics
+      // Calculating statistics
       if (profile) {
         const allCompletedBattles = [
           ...(createdData || []).filter(b => b.status === 'completed'),

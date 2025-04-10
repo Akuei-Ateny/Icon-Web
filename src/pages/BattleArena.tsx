@@ -364,12 +364,14 @@ const BattleArena = () => {
     setChatInput('');
   };
 
+  // Handle chat key press
   const handleChatKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       sendChatMessage();
     }
   };
 
+  // Format time
   const formatTime = (seconds: number | null): string => {
     if (seconds === null) return '∞';
     const m = Math.floor(seconds / 60);
@@ -396,6 +398,7 @@ const BattleArena = () => {
     });
   };
 
+  // End drag
   const endDrag = () => {
     document.removeEventListener('mousemove', onDrag);
     document.removeEventListener('mouseup', endDrag);

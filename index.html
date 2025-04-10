@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -8,20 +7,18 @@
     <meta name="description" content="Join ICON, the ultimate competitive coding platform for algorithmic battles" />
     <meta name="author" content="ICON" />
 
+    <!-- Open Graph Metadata -->
     <meta property="og:title" content="ICON - Competitive Coding Platform" />
     <meta property="og:description" content="Join ICON, the ultimate competitive coding platform for algorithmic battles" />
     <meta property="og:type" content="website" />
-    <meta property="og:image" content="https://lovable.dev/opengraph-image-p98pqg.png" />
 
+    <!-- Twitter Card Metadata -->
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:site" content="@lovable_dev" />
-    <meta name="twitter:image" content="https://lovable.dev/opengraph-image-p98pqg.png" />
-    
+    <meta name="twitter:site" content="@icon_coding" />
+
     <!-- Supabase Auth Helper -->
     <script>
       if (window.location.hash && window.location.hash.includes('access_token')) {
-        // The page was loaded with a hash that might be from Supabase Auth
-        // We'll let the Supabase client handle it
         window.addEventListener('load', function() {
           // This will be handled by the auth.onAuthStateChange in AuthContext
         });
@@ -31,8 +28,5 @@
 
   <body>
     <div id="root"></div>
-    <!-- IMPORTANT: DO NOT REMOVE THIS SCRIPT TAG OR THIS VERY COMMENT! -->
-    <script src="https://cdn.gpteng.co/gptengineer.js" type="module"></script>
-    <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

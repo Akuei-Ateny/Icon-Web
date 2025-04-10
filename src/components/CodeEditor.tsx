@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Play, Save, X } from 'lucide-react';
@@ -77,6 +76,38 @@ public:
 }
 `;
         break;
+      case 'ruby':
+        starterCode = `def solution(nums, target)
+  # Your code here
+  
+  return []
+end
+`;
+        break;
+      case 'go':
+        starterCode = `package main
+
+import "fmt"
+
+func solution(nums []int, target int) []int {
+  // Your code here
+  
+  return []int{}
+}
+
+func main() {
+  fmt.Println(solution([]int{2, 7, 11, 15}, 9))
+}
+`;
+        break;
+      case 'typescript':
+        starterCode = `function solution(nums: number[], target: number): number[] {
+  // Your code here
+  
+  return [];
+}
+`;
+        break;
       default:
         starterCode = '// Start coding here';
     }
@@ -130,6 +161,9 @@ public:
       case 'java': return 'language-java';
       case 'cpp': return 'language-cpp';
       case 'csharp': return 'language-csharp';
+      case 'ruby': return 'language-ruby';
+      case 'go': return 'language-go';
+      case 'typescript': return 'language-typescript';
       default: return 'language-javascript';
     }
   };
