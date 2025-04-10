@@ -96,15 +96,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     try {
       console.log('Fetching profile for user ID:', userId);
       
-      // Check if we need to create the profiles table
+      // Check if we need to create the tables
       if (!dbInitialized) {
         await initializeDatabase();
         setDbInitialized(true);
       }
       
-      // Query profile directly without checking if table exists (handled in initializeDatabase)
+      // Query users table directly (not profiles)
       const { data, error } = await supabase
-        .from('profiles')
+        .from('users')
         .select('*')
         .eq('id', userId)
         .single();
@@ -141,20 +141,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
       
       if (count === 0) {
-        const { data: profileData } = await supabase
-          .from('profiles')
+        const { data: userData } = await supabase
+          .from('users')
           .select('rating, created_at')
           .eq('id', userId)
           .single();
         
-        if (profileData) {
+        if (userData) {
           await supabase
             .from('rating_history')
             .insert({
               user_id: userId,
-              rating: profileData.rating,
+              rating: userData.rating,
               notes: 'Initial rating',
-              created_at: profileData.created_at
+              created_at: userData.created_at
             });
           
           console.log('Created initial rating history entry');
@@ -174,15 +174,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         
         const newProfile = {
           id: userData.user.id,
-          username: userData.user.user_metadata?.name || userData.user.user_metadata?.full_name || 'Anonymous Coder',
+          username: userData.user.user_metadata?.name || userData.user.user_metadata?.full_name || `Coder${Math.floor(Math.random() * 10000)}`,
           email: userData.user.email,
           avatar_url: userData.user.user_metadata?.avatar_url || null,
           rating: 1000,
-          created_at: new Date().toISOString()
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
         };
         
         const { data, error } = await supabase
-          .from('profiles')
+          .from('users')
           .insert(newProfile)
           .select()
           .single();
@@ -195,6 +196,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           setProfile(data as Profile);
           
           try {
+            // Create initial rating history
             await supabase
               .from('rating_history')
               .insert({

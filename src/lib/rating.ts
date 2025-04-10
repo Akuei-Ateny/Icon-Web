@@ -1,4 +1,3 @@
-
 import { supabase, RatingHistory } from './supabase';
 
 /**
@@ -16,9 +15,9 @@ export async function recordRatingChange(
   notes?: string | null
 ): Promise<RatingHistory | null> {
   try {
-    // First update the user's current rating
+    // First update the user's current rating in users table
     const { error: updateError } = await supabase
-      .from('profiles')
+      .from('users')
       .update({ rating: newRating, updated_at: new Date().toISOString() })
       .eq('id', userId);
     
@@ -27,7 +26,7 @@ export async function recordRatingChange(
       return null;
     }
     
-    // Then add a rating history entry
+    // Then add a rating history entry directly referencing auth.users(id)
     const { data, error } = await supabase
       .from('rating_history')
       .insert({
@@ -100,14 +99,14 @@ export async function fetchRatingHistory(userId: string): Promise<RatingHistory[
     // If no rating history exists, create an initial entry
     if (count === 0) {
       // Get the user's current rating
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
+      const { data: userData, error: profileError } = await supabase
+        .from('users')
         .select('rating, created_at')
         .eq('id', userId)
         .single();
       
       if (profileError) {
-        console.error('Error fetching user profile:', profileError);
+        console.error('Error fetching user data:', profileError);
         return [];
       }
       
@@ -116,9 +115,9 @@ export async function fetchRatingHistory(userId: string): Promise<RatingHistory[
         .from('rating_history')
         .insert({
           user_id: userId,
-          rating: profileData.rating,
+          rating: userData.rating,
           notes: 'Initial rating',
-          created_at: profileData.created_at
+          created_at: userData.created_at
         });
       
       if (insertError) {

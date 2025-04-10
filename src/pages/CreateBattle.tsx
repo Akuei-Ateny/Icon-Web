@@ -39,7 +39,7 @@ const CreateBattle = () => {
       
       // Verify the user exists in the profiles table
       const { data: userProfile, error: profileError } = await supabase
-        .from('profiles')
+        .from('users')
         .select('id')
         .eq('id', user.id)
         .single();
