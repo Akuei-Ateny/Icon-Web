@@ -39,7 +39,7 @@ export function useQuizQuestion(questionIndex: number) {
         }
 
         // If not cached, fetch from the API
-        const apiKey = import.meta.env.VITE_OPENAI_API_KEY || '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'; 
+        const apiKey = import.meta.env.VITE_OPENAI_API_KEY || ''; 
         
         const response = await fetch('https://api.openai.com/v1/chat/completions', {
           method: 'POST',
